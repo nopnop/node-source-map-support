@@ -189,6 +189,59 @@ function wrapCallSite(frame) {
       line: frame.getLineNumber(),
       column: frame.getColumnNumber() - 1
     });
+
+    return {
+      toString: function() {
+        var location = position.source + ':' + position.line + ':' + position.column + 1;
+        var type = frame.getTypeName();
+        var func = frame.getFunctionName();
+        var meth = frame.getMethodName();
+
+        if(!func && !meth) {
+          func = '<anonymous>';
+        }
+
+        if(frame.isConstructor()) {
+          return 'new ' + frame.getFunctionName() + ' (' + location + ')'
+        }
+
+        var as = meth && (meth != func) ? ' [as ' + meth + ']' : '';
+        return (type ? type + '.' :'') + func + as + ' (' + location + ')'
+      },
+      getFileName: function() { return position.source; },
+      getLineNumber: function() { return position.line; },
+      getColumnNumber: function() { return position.column + 1; },
+      getScriptNameOrSourceURL: function() { return position.source; }
+    }
+  }
+
+  // Code called using eval() needs special handling
+  var origin = frame.isEval() && frame.getEvalOrigin();
+  if (origin) {
+    origin = mapEvalOrigin(origin);
+    return {
+      getEvalOrigin: function() { return origin; },
+      toString: function() {
+        return origin;
+      }
+    };
+  }
+
+  // If we get here then we were unable to change the source position
+  return frame;
+}
+
+function wrapCallSite(frame) {
+  // Most call sites will return the source file from getFileName(), but code
+  // passed to eval() ending in "//# sourceURL=..." will return the source file
+  // from getScriptNameOrSourceURL() instead
+  var source = frame.getFileName() || frame.getScriptNameOrSourceURL();
+  if (source) {
+    var position = mapSourcePosition({
+      source: source,
+      line: frame.getLineNumber(),
+      column: frame.getColumnNumber() - 1
+    });
     return {
       __proto__: frame,
       getFileName: function() { return position.source; },
@@ -198,15 +251,7 @@ function wrapCallSite(frame) {
     };
   }
 
-  // Code called using eval() needs special handling
-  var origin = frame.isEval() && frame.getEvalOrigin();
-  if (origin) {
-    origin = mapEvalOrigin(origin);
-    return {
-      __proto__: frame,
-      getEvalOrigin: function() { return origin; }
-    };
-  }
+
 
   // If we get here then we were unable to change the source position
   return frame;
